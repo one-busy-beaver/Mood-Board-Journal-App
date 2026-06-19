@@ -18,7 +18,7 @@ class NoteOverlay(BaseOverlay):
         self._note = note
         self._board_ctrl = board_ctrl
         super().__init__(parent, shortcuts)
-        QShortcut(shortcuts.key_sequence(OVERLAY_CONFIRM), self).activated.connect(self._close)
+        QShortcut(shortcuts.key_sequence(OVERLAY_CONFIRM), self).activated.connect(self._confirm)
 
     # ── BaseOverlay hooks ─────────────────────────────────────────────────────
 
@@ -112,13 +112,16 @@ class NoteOverlay(BaseOverlay):
             QPushButton:hover { background: #d97706; }
             QPushButton:pressed { background: #b45309; }
         """)
-        done_btn.clicked.connect(self._close)
+        done_btn.clicked.connect(self._confirm)
         fl.addWidget(done_btn)
         layout.addWidget(footer)
 
     def _initial_focus(self):
         self._editor.setFocus()
 
-    def _on_close(self):
+    def _confirm(self):
+        """Commit edits to the note, then close. Only path that saves —
+        closing via ×, Escape, or clicking outside discards changes."""
         self._board_ctrl.update_title(self._note.id, self._title_edit.text())
         self._board_ctrl.update_content(self._note.id, self._editor.dump())
+        self._close()

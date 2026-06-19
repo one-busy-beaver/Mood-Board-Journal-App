@@ -68,7 +68,6 @@ class NoteItem(QGraphicsObject):
     # Signals → consumed by MainWindow / BoardController
     removed = pyqtSignal(str)
     expand_requested = pyqtSignal(str)
-    color_change_requested = pyqtSignal(str)
     geometry_changed = pyqtSignal(str, float, float, float, float)
     content_changed = pyqtSignal(str, dict)
     bring_to_front_requested = pyqtSignal(str)
@@ -116,6 +115,25 @@ class NoteItem(QGraphicsObject):
         self._template.setPlainText(self._note.content.get("body", ""))
         self._template.blockSignals(False)
         self.update()
+
+    def try_wheel_scroll(self, delta: int) -> bool:
+        """Scroll the embedded editor by one wheel notch in the given direction.
+
+        Returns True if the editor actually scrolled (event consumed), or False
+        if it is already at the edge in that direction — letting the canvas zoom
+        instead. `delta` is QWheelEvent.angleDelta().y() (>0 = wheel up).
+        """
+        sb = self._template.verticalScrollBar()
+        if sb.maximum() <= sb.minimum():
+            return False  # content fits, nothing to scroll
+        if delta > 0 and sb.value() <= sb.minimum():
+            return False  # already at top
+        if delta < 0 and sb.value() >= sb.maximum():
+            return False  # already at bottom
+        notches = delta / 120.0
+        step = max(1, sb.singleStep()) * 3
+        sb.setValue(sb.value() - int(notches * step))
+        return True
 
     # ── Resize protocol (called by ResizeHandle) ──────────────────────────────
 
@@ -232,10 +250,6 @@ class NoteItem(QGraphicsObject):
                 self.expand_requested.emit(self._note.id)
                 e.accept()
                 return
-            if self._color_rect().contains(pos):
-                self.color_change_requested.emit(self._note.id)
-                e.accept()
-                return
             if pos.y() <= self.TITLE_H:
                 self._moving = True
                 self._move_offset = e.scenePos() - self.scenePos()
@@ -311,14 +325,7 @@ class NoteItem(QGraphicsObject):
             self._handles[d].setPos(pos)
 
     def _buttons_width(self) -> float:
-        return self.BTN_SIZE * 3 + self.BTN_PAD * 5
-
-    def _color_rect(self) -> QRectF:
-        bw = self.BTN_SIZE
-        bp = self.BTN_PAD
-        x = self._w - bw * 3 - bp * 5
-        y = (self.TITLE_H - bw) / 2
-        return QRectF(x, y, bw, bw)
+        return self.BTN_SIZE * 2 + self.BTN_PAD * 3
 
     def _expand_rect(self) -> QRectF:
         bw = self.BTN_SIZE
@@ -337,12 +344,6 @@ class NoteItem(QGraphicsObject):
     def _paint_buttons(self, painter: QPainter):
         er = self._expand_rect()
         cr = self._close_rect()
-        clr = self._color_rect()
-
-        # Color swatch: filled circle in note's current color with a subtle ring
-        painter.setPen(QPen(QColor(0, 0, 0, 40), 1))
-        painter.setBrush(QBrush(QColor(self._note.color)))
-        painter.drawEllipse(clr.adjusted(1, 1, -1, -1))
 
         painter.setPen(QPen(QColor("#a8a29e"), 1.5))
         painter.setBrush(Qt.BrushStyle.NoBrush)

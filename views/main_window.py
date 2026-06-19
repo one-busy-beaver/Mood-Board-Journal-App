@@ -2,7 +2,7 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel,
 )
-from PyQt6.QtCore import Qt, QTimer, QPointF
+from PyQt6.QtCore import Qt, QTimer, QPointF, QSize
 from PyQt6.QtGui import QKeySequence, QShortcut
 
 from controllers.board_controller import BoardController
@@ -14,6 +14,8 @@ from views.board_canvas import BoardCanvas
 from views.note_item import NoteItem
 from views.note_overlay import NoteOverlay
 from views.color_picker_overlay import ColorPickerOverlay
+from views.tools.base_tool import Tool
+from views.tools.color_tool import ColorTool
 
 
 class MainWindow(QMainWindow):
@@ -26,6 +28,11 @@ class MainWindow(QMainWindow):
         self._items: dict[str, NoteItem] = {}
         self._active_overlay: NoteOverlay | None = None
         self._active_note_id: str | None = None
+        self._dirty = False
+
+        # Registered toolbar tools (add new ones here)
+        self._tools: list[Tool] = [ColorTool()]
+        self._tool_buttons: dict[Tool, QPushButton] = {}
 
         self.setWindowTitle("Journal")
         self.resize(1280, 800)
@@ -33,7 +40,6 @@ class MainWindow(QMainWindow):
         self._wire_shortcuts()
         self._wire_controller()
         self._load_saved_notes()
-        self._start_autosave()
 
     # ── UI construction ───────────────────────────────────────────────────────
 
@@ -53,19 +59,30 @@ class MainWindow(QMainWindow):
 
     def _build_toolbar(self) -> QWidget:
         bar = QWidget()
-        bar.setFixedHeight(46)
+        bar.setFixedHeight(58)
         bar.setStyleSheet(
             "background: #292524; border-bottom: 1px solid #3a3330;"
         )
         layout = QHBoxLayout(bar)
         layout.setContentsMargins(14, 0, 14, 0)
-        layout.setSpacing(8)
+        layout.setSpacing(6)
+        layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
-        title = QLabel("Journal")
-        title.setStyleSheet(
-            "color: #f5f5f4; font-size: 14px; font-weight: 600; letter-spacing: 0.5px;"
-        )
-        layout.addWidget(title)
+        layout.addWidget(self._make_brand("Journal"))
+        layout.addWidget(self._make_divider())
+
+        # ── Tools (icon + name underneath) ──
+        for tool in self._tools:
+            btn = QPushButton()
+            btn.setIcon(tool.icon())
+            btn.setIconSize(QSize(22, 22))
+            btn.setFixedSize(34, 30)
+            btn.setToolTip(tool.tooltip)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.clicked.connect(lambda _, t=tool: self._activate_tool(t))
+            self._tool_buttons[tool] = btn
+            layout.addWidget(self._make_tool(btn, tool.name))
+
         layout.addStretch()
 
         self._status_label = QLabel("")
@@ -83,7 +100,66 @@ class MainWindow(QMainWindow):
         save_btn.clicked.connect(self._save)
         layout.addWidget(save_btn)
 
+        self._refresh_tools()
         return bar
+
+    @staticmethod
+    def _make_divider() -> QWidget:
+        div = QWidget()
+        div.setFixedSize(1, 34)
+        div.setStyleSheet("background: #3a3330;")
+        return div
+
+    @staticmethod
+    def _make_brand(text: str) -> QWidget:
+        """Title styled with the same two-row geometry as a tool, so its baseline
+        lines up with the tool icons rather than floating between icon and caption."""
+        wrap = QWidget()
+        wrap.setStyleSheet("background: transparent;")
+        v = QVBoxLayout(wrap)
+        v.setContentsMargins(2, 0, 8, 0)
+        v.setSpacing(3)
+        label = QLabel(text)
+        label.setFixedHeight(22)
+        label.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        label.setStyleSheet(
+            "color: #f5f5f4; font-size: 15px; font-weight: 600; "
+            "letter-spacing: 0.5px; background: transparent;"
+        )
+        v.addWidget(label)
+        spacer = QLabel("")  # matches the tool caption row height for alignment
+        spacer.setFixedHeight(11)
+        spacer.setStyleSheet("background: transparent;")
+        v.addWidget(spacer)
+        return wrap
+
+    @staticmethod
+    def _make_tool(widget: QWidget, name: str) -> QWidget:
+        """Wrap a tool control with a small caption underneath (toolbar pattern)."""
+        wrap = QWidget()
+        wrap.setStyleSheet("background: transparent;")
+        v = QVBoxLayout(wrap)
+        v.setContentsMargins(2, 0, 2, 0)
+        v.setSpacing(3)
+        v.addWidget(widget, alignment=Qt.AlignmentFlag.AlignHCenter)
+        caption = QLabel(name)
+        caption.setFixedHeight(11)
+        caption.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        caption.setStyleSheet(
+            "color: #a8a29e; font-size: 9px; font-weight: 500; background: transparent;"
+        )
+        v.addWidget(caption)
+        return wrap
+
+    def _refresh_tools(self):
+        """Re-evaluate each tool's enabled state and dynamic styling."""
+        for tool, btn in self._tool_buttons.items():
+            btn.setEnabled(tool.is_enabled(self))
+            tool.style_button(btn, self)
+
+    def _activate_tool(self, tool: Tool):
+        if tool.is_enabled(self):
+            tool.activate(self)
 
     @staticmethod
     def _make_btn(text: str, bg: str, hover: str, w: int = 72,
@@ -126,15 +202,14 @@ class MainWindow(QMainWindow):
         self._board_ctrl.note_removed.connect(self._on_note_removed)
         self._board_ctrl.z_order_changed.connect(self._on_z_changed)
         self._board_ctrl.note_color_changed.connect(self._on_note_color_changed)
+        # Any model mutation marks the board dirty (persisted only on explicit Save)
+        self._board_ctrl.board_changed.connect(self._on_board_changed)
 
     def _load_saved_notes(self):
         for note in self._board_ctrl.board.notes:
             self._on_note_added(note)
-
-    def _start_autosave(self):
-        timer = QTimer(self)
-        timer.timeout.connect(self._autosave)
-        timer.start(60_000)
+        # Loading isn't a user edit — start clean
+        self._dirty = False
 
     # ── Note lifecycle ────────────────────────────────────────────────────────
 
@@ -145,13 +220,13 @@ class MainWindow(QMainWindow):
         item.geometry_changed.connect(self._on_geometry_changed)
         item.content_changed.connect(self._board_ctrl.update_content)
         item.bring_to_front_requested.connect(self._on_note_focused)
-        item.color_change_requested.connect(self._open_color_picker)
         self._canvas.scene.addItem(item)
         self._items[note.id] = item
 
     def _on_note_removed(self, note_id: str):
         if self._active_note_id == note_id:
             self._active_note_id = None
+            self._refresh_tools()
         item = self._items.pop(note_id, None)
         if item:
             self._canvas.scene.removeItem(item)
@@ -183,6 +258,7 @@ class MainWindow(QMainWindow):
 
     def _on_note_focused(self, note_id: str):
         self._active_note_id = note_id
+        self._refresh_tools()
 
     def _on_overlay_closed(self, note_id: str):
         self._active_overlay = None
@@ -194,14 +270,29 @@ class MainWindow(QMainWindow):
         item = self._items.get(note_id)
         if item:
             item.update()
+        if note_id == self._active_note_id:
+            self._refresh_tools()
 
-    def _open_color_picker(self, note_id: str):
+    # ── Public interface used by Tools ────────────────────────────────────────
+
+    def active_note(self) -> Note | None:
+        if self._active_note_id is None:
+            return None
+        return next(
+            (n for n in self._board_ctrl.board.notes if n.id == self._active_note_id),
+            None,
+        )
+
+    def open_color_picker_for_active(self):
         if self._active_overlay:
             return
-        note = next((n for n in self._board_ctrl.board.notes if n.id == note_id), None)
+        note = self.active_note()
         if note is None:
+            self._flash_status("Select a note first")
             return
-        overlay = ColorPickerOverlay(note_id, note.color, self._board_ctrl, self, self._shortcuts)
+        overlay = ColorPickerOverlay(
+            note.id, note.color, self._board_ctrl, self, self._shortcuts
+        )
         self._active_overlay = overlay
         overlay.closed.connect(lambda: setattr(self, '_active_overlay', None))
 
@@ -254,18 +345,31 @@ class MainWindow(QMainWindow):
         if note_id:
             self._board_ctrl.send_to_back(note_id)
 
-    # ── Persistence ───────────────────────────────────────────────────────────
+    # ── Persistence (explicit save only — no autosave, no save-on-close) ──────
+
+    def _on_board_changed(self):
+        self._dirty = True
+        self._update_dirty_indicator()
 
     def _save(self):
         self._persistence.save(self._board_ctrl.board)
-        self._flash_status("Saved")
+        self._dirty = False
+        self._status_label.setText("Saved ✓")
+        self._status_label.setStyleSheet("color: #6ee7b7; font-size: 11px;")
+        QTimer.singleShot(1500, self._update_dirty_indicator)
 
-    def _autosave(self):
-        self._persistence.save(self._board_ctrl.board)
+    def _update_dirty_indicator(self):
+        if self._dirty:
+            self._status_label.setText("● Unsaved")
+            self._status_label.setStyleSheet("color: #f59e0b; font-size: 11px;")
+        else:
+            self._status_label.setText("")
+            self._status_label.setStyleSheet("color: #78716c; font-size: 11px;")
 
     def _flash_status(self, msg: str, ms: int = 2000):
         self._status_label.setText(msg)
-        QTimer.singleShot(ms, lambda: self._status_label.setText(""))
+        self._status_label.setStyleSheet("color: #78716c; font-size: 11px;")
+        QTimer.singleShot(ms, self._update_dirty_indicator)
 
     # ── Window events ─────────────────────────────────────────────────────────
 
@@ -275,7 +379,8 @@ class MainWindow(QMainWindow):
             self._active_overlay.setGeometry(self.rect())
 
     def closeEvent(self, e):
+        # Deliberately does NOT persist — unsaved changes are discarded unless the
+        # user explicitly saved (Ctrl+S / Save button).
         if self._active_overlay:
             self._active_overlay._close()
-        self._save()
         super().closeEvent(e)
