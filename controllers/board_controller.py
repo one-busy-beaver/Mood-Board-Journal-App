@@ -7,7 +7,8 @@ class BoardController(QObject):
     note_added = pyqtSignal(object)    # Note
     note_removed = pyqtSignal(str)     # note_id
     board_changed = pyqtSignal()
-    z_order_changed = pyqtSignal(str, float)  # note_id, new_z
+    z_order_changed = pyqtSignal(str, float)   # note_id, new_z
+    note_color_changed = pyqtSignal(str, str)  # note_id, new_color
 
     def __init__(self, board: Board):
         super().__init__()
@@ -89,6 +90,13 @@ class BoardController(QObject):
         self.z_order_changed.emit(note_id, note.geometry.z_index)
         self.z_order_changed.emit(below.id, below.geometry.z_index)
         self.board_changed.emit()
+
+    def update_color(self, note_id: str, color: str):
+        note = self._find(note_id)
+        if note:
+            note.color = color
+            self.note_color_changed.emit(note_id, color)
+            self.board_changed.emit()
 
     def update_content(self, note_id: str, content: dict):
         note = self._find(note_id)

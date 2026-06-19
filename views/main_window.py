@@ -2,22 +2,27 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel,
 )
-from PyQt6.QtCore import Qt, QTimer, QPointF, QKeyCombination
+from PyQt6.QtCore import Qt, QTimer, QPointF
 from PyQt6.QtGui import QKeySequence, QShortcut
 
 from controllers.board_controller import BoardController
 from controllers.persistence_controller import PersistenceController
 from models.note import Note
+from utils.shortcuts import ShortcutMap, SAVE, NEW_NOTE, DELETE, DELETE_ALT
+from utils.shortcuts import REORDER_UP, REORDER_DOWN, REORDER_TO_FRONT, REORDER_TO_BACK
 from views.board_canvas import BoardCanvas
 from views.note_item import NoteItem
 from views.note_overlay import NoteOverlay
+from views.color_picker_overlay import ColorPickerOverlay
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, board_ctrl: BoardController, persistence: PersistenceController):
+    def __init__(self, board_ctrl: BoardController, persistence: PersistenceController,
+                 shortcuts: ShortcutMap):
         super().__init__()
         self._board_ctrl = board_ctrl
         self._persistence = persistence
+        self._shortcuts = shortcuts
         self._items: dict[str, NoteItem] = {}
         self._active_overlay: NoteOverlay | None = None
         self._active_note_id: str | None = None
@@ -102,25 +107,25 @@ class MainWindow(QMainWindow):
     # ── Wiring ────────────────────────────────────────────────────────────────
 
     def _wire_shortcuts(self):
-        QShortcut(QKeySequence("Ctrl+S"), self).activated.connect(self._save)
-        QShortcut(QKeySequence("Ctrl+N"), self).activated.connect(self._add_note_center)
-        QShortcut(QKeySequence("Delete"), self).activated.connect(self._delete_selected)
-        QShortcut(QKeySequence("Backspace"), self).activated.connect(self._delete_selected)
-        Shift = Qt.KeyboardModifier.ShiftModifier
-        Ctrl  = Qt.KeyboardModifier.ControlModifier
-        QShortcut(QKeySequence(QKeyCombination(Shift, Qt.Key.Key_Up)),
-                  self).activated.connect(self._reorder_up)
-        QShortcut(QKeySequence(QKeyCombination(Shift, Qt.Key.Key_Down)),
-                  self).activated.connect(self._reorder_down)
-        QShortcut(QKeySequence(QKeyCombination(Ctrl | Shift, Qt.Key.Key_Up)),
-                  self).activated.connect(self._reorder_to_front)
-        QShortcut(QKeySequence(QKeyCombination(Ctrl | Shift, Qt.Key.Key_Down)),
-                  self).activated.connect(self._reorder_to_back)
+        sc = self._shortcuts
+
+        def bind(action: str, slot):
+            QShortcut(sc.key_sequence(action), self).activated.connect(slot)
+
+        bind(SAVE,             self._save)
+        bind(NEW_NOTE,         self._add_note_center)
+        bind(DELETE,           self._delete_selected)
+        bind(DELETE_ALT,       self._delete_selected)
+        bind(REORDER_UP,       self._reorder_up)
+        bind(REORDER_DOWN,     self._reorder_down)
+        bind(REORDER_TO_FRONT, self._reorder_to_front)
+        bind(REORDER_TO_BACK,  self._reorder_to_back)
 
     def _wire_controller(self):
         self._board_ctrl.note_added.connect(self._on_note_added)
         self._board_ctrl.note_removed.connect(self._on_note_removed)
         self._board_ctrl.z_order_changed.connect(self._on_z_changed)
+        self._board_ctrl.note_color_changed.connect(self._on_note_color_changed)
 
     def _load_saved_notes(self):
         for note in self._board_ctrl.board.notes:
@@ -140,6 +145,7 @@ class MainWindow(QMainWindow):
         item.geometry_changed.connect(self._on_geometry_changed)
         item.content_changed.connect(self._board_ctrl.update_content)
         item.bring_to_front_requested.connect(self._on_note_focused)
+        item.color_change_requested.connect(self._open_color_picker)
         self._canvas.scene.addItem(item)
         self._items[note.id] = item
 
@@ -171,7 +177,7 @@ class MainWindow(QMainWindow):
         )
         if note is None:
             return
-        overlay = NoteOverlay(note, self._board_ctrl, self)
+        overlay = NoteOverlay(note, self._board_ctrl, self, self._shortcuts)
         self._active_overlay = overlay
         overlay.closed.connect(lambda: self._on_overlay_closed(note_id))
 
@@ -183,6 +189,21 @@ class MainWindow(QMainWindow):
         item = self._items.get(note_id)
         if item:
             item.sync_from_model()
+
+    def _on_note_color_changed(self, note_id: str, _color: str):
+        item = self._items.get(note_id)
+        if item:
+            item.update()
+
+    def _open_color_picker(self, note_id: str):
+        if self._active_overlay:
+            return
+        note = next((n for n in self._board_ctrl.board.notes if n.id == note_id), None)
+        if note is None:
+            return
+        overlay = ColorPickerOverlay(note_id, note.color, self._board_ctrl, self, self._shortcuts)
+        self._active_overlay = overlay
+        overlay.closed.connect(lambda: setattr(self, '_active_overlay', None))
 
     def _on_z_changed(self, note_id: str, z: float):
         item = self._items.get(note_id)

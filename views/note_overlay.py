@@ -1,44 +1,31 @@
-from PyQt6.QtWidgets import (
-    QWidget, QFrame, QVBoxLayout, QHBoxLayout,
-    QLineEdit, QPushButton, QGraphicsDropShadowEffect,
-)
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer
-from PyQt6.QtGui import QPainter, QColor, QFont, QKeySequence, QShortcut
+from PyQt6.QtWidgets import QWidget, QFrame, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton
+from PyQt6.QtGui import QColor, QFont, QKeySequence, QShortcut
 
 from models.note import Note
 from controllers.board_controller import BoardController
+from utils.shortcuts import ShortcutMap, OVERLAY_CONFIRM
+from views.base_overlay import BaseOverlay
 from views.templates.plain_text import PlainTextTemplate
 
 
-class NoteOverlay(QWidget):
-    closed = pyqtSignal()
-
+class NoteOverlay(BaseOverlay):
     CARD_W = 640
     CARD_H = 520
     TITLE_H = 44
 
-    def __init__(self, note: Note, board_ctrl: BoardController, parent: QWidget):
-        super().__init__(parent)
+    def __init__(self, note: Note, board_ctrl: BoardController,
+                 parent, shortcuts: ShortcutMap):
         self._note = note
         self._board_ctrl = board_ctrl
-        self._closing = False
+        super().__init__(parent, shortcuts)
+        QShortcut(shortcuts.key_sequence(OVERLAY_CONFIRM), self).activated.connect(self._close)
 
-        # Snapshot the board BEFORE the overlay appears so paintEvent can show it dimmed
-        self._bg = parent.grab()
+    # ── BaseOverlay hooks ─────────────────────────────────────────────────────
 
-        self.setGeometry(parent.rect())
-        self.raise_()
-        self.show()
+    def _card_background(self) -> str:
+        return self._note.color
 
-        self._build_card()
-        QTimer.singleShot(0, self._editor.setFocus)
-
-        QShortcut(QKeySequence("Escape"), self).activated.connect(self._close)
-        QShortcut(QKeySequence("Ctrl+Return"), self).activated.connect(self._close)
-
-    # ── Card construction ─────────────────────────────────────────────────────
-
-    def _build_card(self):
+    def _populate_card(self, layout: QVBoxLayout):
         base = QColor(self._note.color)
 
         def blended(alpha: int) -> str:
@@ -48,26 +35,6 @@ class NoteOverlay(QWidget):
                 int(base.green() * (1 - f)),
                 int(base.blue()  * (1 - f)),
             ).name()
-
-        self._card = QFrame(self)
-        self._card.setObjectName("noteCard")
-        self._card.setFixedSize(self.CARD_W, self.CARD_H)
-        self._card.setStyleSheet(f"""
-            QFrame#noteCard {{
-                background: {self._note.color};
-                border-radius: 10px;
-            }}
-        """)
-
-        shadow = QGraphicsDropShadowEffect(self._card)
-        shadow.setBlurRadius(32)
-        shadow.setOffset(0, 8)
-        shadow.setColor(QColor(0, 0, 0, 100))
-        self._card.setGraphicsEffect(shadow)
-
-        layout = QVBoxLayout(self._card)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
 
         # ── Title bar ──
         title_bar = QWidget()
@@ -149,42 +116,9 @@ class NoteOverlay(QWidget):
         fl.addWidget(done_btn)
         layout.addWidget(footer)
 
-        self._reposition_card()
-        self._card.show()
+    def _initial_focus(self):
+        self._editor.setFocus()
 
-    def _reposition_card(self):
-        if not hasattr(self, '_card'):
-            return
-        x = (self.width()  - self.CARD_W) // 2
-        y = (self.height() - self.CARD_H) // 2
-        self._card.move(x, y)
-
-    # ── Qt overrides ──────────────────────────────────────────────────────────
-
-    def resizeEvent(self, e):
-        super().resizeEvent(e)
-        self._reposition_card()
-
-    def paintEvent(self, e):
-        painter = QPainter(self)
-        # Draw the frozen board snapshot so the background is visible behind the dim
-        painter.drawPixmap(self.rect(), self._bg)
-        painter.fillRect(self.rect(), QColor(0, 0, 0, 150))
-
-    def mousePressEvent(self, e):
-        if not self._card.geometry().contains(e.pos()):
-            self._close()
-        else:
-            super().mousePressEvent(e)
-
-    # ── Save & close ──────────────────────────────────────────────────────────
-
-    def _close(self):
-        if self._closing:
-            return
-        self._closing = True
+    def _on_close(self):
         self._board_ctrl.update_title(self._note.id, self._title_edit.text())
         self._board_ctrl.update_content(self._note.id, self._editor.dump())
-        self.closed.emit()
-        self.hide()
-        self.deleteLater()
