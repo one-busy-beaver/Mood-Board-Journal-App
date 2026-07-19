@@ -26,6 +26,7 @@ class PersistenceController:
         return {
             "title": board.title,
             "created_at": board.created_at,
+            "scale": board.scale,
             "notes": [self._serialize_note(n) for n in board.notes],
             "groups": [
                 {"id": g.id, "name": g.name, "note_ids": g.note_ids, "color": g.color}
@@ -41,6 +42,7 @@ class PersistenceController:
             "template_type": note.template_type,
             "content": note.content,
             "color": note.color,
+            "font_size": note.font_size,
             "group_id": note.group_id,
             "geometry": {
                 "x": g.x, "y": g.y,
@@ -53,6 +55,7 @@ class PersistenceController:
         board = Board(
             title=data.get("title", "My Journal"),
             created_at=data.get("created_at", ""),
+            scale=data.get("scale", 1.0),
         )
         for nd in data.get("notes", []):
             geo = nd.get("geometry", {})
@@ -62,6 +65,7 @@ class PersistenceController:
                 template_type=nd.get("template_type", "plain_text"),
                 content=nd.get("content", {}),
                 color=nd.get("color", "#FFFBEB"),
+                font_size=nd.get("font_size", 10),
                 group_id=nd.get("group_id"),
                 geometry=NoteGeometry(
                     x=geo.get("x", 100), y=geo.get("y", 100),
@@ -75,4 +79,24 @@ class PersistenceController:
                 note_ids=gd.get("note_ids", []),
                 color=gd.get("color", "#E0E7FF"),
             ))
+        self._normalize_positions(board)
         return board
+
+    # Migration: pre-workspace saves used infinite-canvas scene coordinates that
+    # could be negative. The bounded workspace has no negative space, so shift the
+    # whole board back into view — preserving relative layout — when any note sits
+    # off the top/left. No-op for boards already in positive space.
+    MARGIN = 40
+
+    def _normalize_positions(self, board: Board):
+        if not board.notes:
+            return
+        min_x = min(n.geometry.x for n in board.notes)
+        min_y = min(n.geometry.y for n in board.notes)
+        dx = (self.MARGIN - min_x) if min_x < 0 else 0
+        dy = (self.MARGIN - min_y) if min_y < 0 else 0
+        if dx == 0 and dy == 0:
+            return
+        for n in board.notes:
+            n.geometry.x += dx
+            n.geometry.y += dy

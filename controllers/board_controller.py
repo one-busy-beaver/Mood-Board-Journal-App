@@ -9,6 +9,13 @@ class BoardController(QObject):
     board_changed = pyqtSignal()
     z_order_changed = pyqtSignal(str, float)   # note_id, new_z
     note_color_changed = pyqtSignal(str, str)  # note_id, new_color
+    note_font_changed = pyqtSignal(str, int)   # note_id, new_font_size
+    scale_changed = pyqtSignal(float)          # new global scale
+
+    SCALE_MIN = 0.5
+    SCALE_MAX = 3.0
+    FONT_MIN = 6
+    FONT_MAX = 72
 
     def __init__(self, board: Board):
         super().__init__()
@@ -109,6 +116,33 @@ class BoardController(QObject):
         if note:
             note.title = title
             self.board_changed.emit()
+
+    def update_font_size(self, note_id: str, size: int):
+        note = self._find(note_id)
+        if note is None:
+            return
+        size = max(self.FONT_MIN, min(self.FONT_MAX, int(size)))
+        if size == note.font_size:
+            return
+        note.font_size = size
+        self.note_font_changed.emit(note_id, size)
+        self.board_changed.emit()
+
+    def set_scale(self, scale: float):
+        scale = max(self.SCALE_MIN, min(self.SCALE_MAX, scale))
+        if abs(scale - self._board.scale) < 1e-6:
+            return
+        self._board.scale = scale
+        self.scale_changed.emit(scale)
+        self.board_changed.emit()
+
+    def nudge_scale(self, direction: int):
+        """direction > 0 = larger, < 0 = smaller. Multiplicative step."""
+        factor = 1.1 if direction > 0 else 1 / 1.1
+        self.set_scale(self._board.scale * factor)
+
+    def reset_scale(self):
+        self.set_scale(1.0)
 
     def _find(self, note_id: str) -> Note | None:
         return next((n for n in self._board.notes if n.id == note_id), None)

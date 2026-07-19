@@ -20,3 +20,4 @@ class Note:
     group_id: str | None = None
     color: str = "#FFFBEB"
     title: str = "Note"
+    font_size: int = 10   # per-note body font size (pt); global scale multiplies it

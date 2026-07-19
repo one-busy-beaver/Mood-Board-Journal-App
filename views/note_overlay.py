@@ -83,7 +83,7 @@ class NoteOverlay(BaseOverlay):
         ew.setContentsMargins(12, 10, 12, 10)
 
         self._editor = PlainTextTemplate(self._note.content, compact=False)
-        self._editor.setFont(QFont("Georgia", 12))
+        self._editor.setFont(QFont("Georgia", self._note.font_size))
         self._editor.setStyleSheet("""
             QTextEdit {
                 background: transparent; border: none;

@@ -24,6 +24,9 @@ REORDER_TO_FRONT = "reorder_to_front"
 REORDER_TO_BACK  = "reorder_to_back"
 OVERLAY_CONFIRM  = "overlay_confirm"  # confirm / close overlay
 DISMISS          = "dismiss"          # cancel / close overlay
+SCALE_UP         = "scale_up"         # increase text size / resolution
+SCALE_DOWN       = "scale_down"       # decrease text size / resolution
+SCALE_RESET      = "scale_reset"      # reset text size to 100%
 
 # ── Default bindings ──────────────────────────────────────────────────────────
 
@@ -38,6 +41,9 @@ DEFAULT_BINDINGS: dict[str, str] = {
     REORDER_TO_BACK:  "Ctrl+Shift+Down",
     OVERLAY_CONFIRM:  "Ctrl+Return",
     DISMISS:          "Escape",
+    SCALE_UP:         "Ctrl+=",
+    SCALE_DOWN:       "Ctrl+-",
+    SCALE_RESET:      "Ctrl+0",
 }
 
 # ── Key-sequence parser ───────────────────────────────────────────────────────

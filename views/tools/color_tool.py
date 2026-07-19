@@ -14,28 +14,19 @@ class ColorTool(Tool):
 
     def style_button(self, button, window) -> None:
         note = window.active_note()
-        if note is None:
-            # Disabled: muted bucket, dashed neutral stripe
-            button.setStyleSheet("""
-                QPushButton {
-                    background: transparent;
-                    border: none;
-                    border-bottom: 4px solid #57534e;
-                    border-radius: 4px;
-                    padding: 3px;
-                }
-            """)
-        else:
-            button.setStyleSheet(f"""
-                QPushButton {{
-                    background: transparent;
-                    border: none;
-                    border-bottom: 4px solid {note.color};
-                    border-radius: 4px;
-                    padding: 3px;
-                }}
-                QPushButton:hover {{ background: #38332f; }}
-            """)
+        stripe = max(2, round(4 * window.ui_scale()))
+        color = "#57534e" if note is None else note.color
+        hover = "" if note is None else "QPushButton:hover { background: #38332f; }"
+        button.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                border: none;
+                border-bottom: {stripe}px solid {color};
+                border-radius: 4px;
+                padding: 3px;
+            }}
+            {hover}
+        """)
 
     def activate(self, window) -> None:
         window.open_color_picker_for_active()
