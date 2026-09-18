@@ -1,33 +1,39 @@
 from PyQt6.QtCore import QObject, pyqtSignal
 from models.note import Note, NoteGeometry
-from models.board import Board
+from models.journal import Journal
 
 
 class BoardController(QObject):
+    """Owns the notes inside ONE journal. Each open journal/tab has its own
+    instance; LibraryController owns which journals exist."""
+
     note_added = pyqtSignal(object)    # Note
     note_removed = pyqtSignal(str)     # note_id
     board_changed = pyqtSignal()
     z_order_changed = pyqtSignal(str, float)   # note_id, new_z
     note_color_changed = pyqtSignal(str, str)  # note_id, new_color
     note_font_changed = pyqtSignal(str, int)   # note_id, new_font_size
-    scale_changed = pyqtSignal(float)          # new global scale
 
-    SCALE_MIN = 0.5
-    SCALE_MAX = 3.0
     FONT_MIN = 6
     FONT_MAX = 72
 
-    def __init__(self, board: Board):
+    def __init__(self, board: Journal):
         super().__init__()
         self._board = board
         self._max_z = max((n.geometry.z_index for n in board.notes), default=0.0)
 
     @property
-    def board(self) -> Board:
+    def board(self) -> Journal:
         return self._board
 
-    def create_note(self, x: float, y: float) -> Note:
-        note = Note(geometry=NoteGeometry(x=x, y=y, z_index=self._next_z()))
+    def create_note(self, x: float, y: float,
+                    width: float = None, height: float = None) -> Note:
+        geo = NoteGeometry(x=x, y=y, z_index=self._next_z())
+        if width is not None:
+            geo.width = width
+        if height is not None:
+            geo.height = height
+        note = Note(geometry=geo)
         self._board.notes.append(note)
         self.note_added.emit(note)
         self.board_changed.emit()
@@ -39,7 +45,8 @@ class BoardController(QObject):
         self.board_changed.emit()
 
     def update_geometry(self, note_id: str, x: float = None, y: float = None,
-                        width: float = None, height: float = None):
+                        width: float = None, height: float = None,
+                        rotation: float = None):
         note = self._find(note_id)
         if note is None:
             return
@@ -51,6 +58,8 @@ class BoardController(QObject):
             note.geometry.width = width
         if height is not None:
             note.geometry.height = height
+        if rotation is not None:
+            note.geometry.rotation = rotation % 360.0
         self.board_changed.emit()
 
     def bring_to_front(self, note_id: str) -> float:
@@ -111,12 +120,6 @@ class BoardController(QObject):
             note.content = content
             self.board_changed.emit()
 
-    def update_title(self, note_id: str, title: str):
-        note = self._find(note_id)
-        if note:
-            note.title = title
-            self.board_changed.emit()
-
     def update_font_size(self, note_id: str, size: int):
         note = self._find(note_id)
         if note is None:
@@ -127,22 +130,6 @@ class BoardController(QObject):
         note.font_size = size
         self.note_font_changed.emit(note_id, size)
         self.board_changed.emit()
-
-    def set_scale(self, scale: float):
-        scale = max(self.SCALE_MIN, min(self.SCALE_MAX, scale))
-        if abs(scale - self._board.scale) < 1e-6:
-            return
-        self._board.scale = scale
-        self.scale_changed.emit(scale)
-        self.board_changed.emit()
-
-    def nudge_scale(self, direction: int):
-        """direction > 0 = larger, < 0 = smaller. Multiplicative step."""
-        factor = 1.1 if direction > 0 else 1 / 1.1
-        self.set_scale(self._board.scale * factor)
-
-    def reset_scale(self):
-        self.set_scale(1.0)
 
     def _find(self, note_id: str) -> Note | None:
         return next((n for n in self._board.notes if n.id == note_id), None)

@@ -27,6 +27,9 @@ DISMISS          = "dismiss"          # cancel / close overlay
 SCALE_UP         = "scale_up"         # increase text size / resolution
 SCALE_DOWN       = "scale_down"       # decrease text size / resolution
 SCALE_RESET      = "scale_reset"      # reset text size to 100%
+TOGGLE_SIDEBAR   = "toggle_sidebar"   # show/hide the explorer sidebar
+NEW_JOURNAL      = "new_journal"      # create a new journal in the library
+CLOSE_TAB        = "close_tab"        # close the active journal tab
 
 # ── Default bindings ──────────────────────────────────────────────────────────
 
@@ -44,6 +47,9 @@ DEFAULT_BINDINGS: dict[str, str] = {
     SCALE_UP:         "Ctrl+=",
     SCALE_DOWN:       "Ctrl+-",
     SCALE_RESET:      "Ctrl+0",
+    TOGGLE_SIDEBAR:   "Ctrl+B",
+    NEW_JOURNAL:      "Ctrl+Shift+N",
+    CLOSE_TAB:        "Ctrl+W",
 }
 
 # ── Key-sequence parser ───────────────────────────────────────────────────────

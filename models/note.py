@@ -9,6 +9,7 @@ class NoteGeometry:
     width: float = 240.0
     height: float = 200.0
     z_index: float = 0.0
+    rotation: float = 0.0   # degrees clockwise about the note's centre
 
 
 @dataclass
@@ -19,5 +20,4 @@ class Note:
     content: dict = field(default_factory=dict)
     group_id: str | None = None
     color: str = "#FFFBEB"
-    title: str = "Note"
     font_size: int = 10   # per-note body font size (pt); global scale multiplies it

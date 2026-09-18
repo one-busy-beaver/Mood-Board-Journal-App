@@ -10,6 +10,3 @@ class NoteController(QObject):
 
     def save_content(self, content: dict):
         self._board_ctrl.update_content(self._id, content)
-
-    def save_title(self, title: str):
-        self._board_ctrl.update_title(self._id, title)

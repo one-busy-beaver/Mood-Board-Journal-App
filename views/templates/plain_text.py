@@ -4,8 +4,10 @@ from PyQt6.QtGui import QFont
 
 
 class PlainTextTemplate(QTextEdit):
-    def __init__(self, content: dict, compact: bool = True, parent=None):
+    def __init__(self, content: dict, compact: bool = True, parent=None,
+                 text_color: str = "#1c1917"):
         super().__init__(parent)
+        self._text_color = text_color
         self.setPlainText(content.get("body", ""))
         self.setAcceptRichText(False)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
@@ -13,34 +15,34 @@ class PlainTextTemplate(QTextEdit):
 
         if compact:
             self.setFont(QFont("Georgia", 9))
-            self.setStyleSheet("""
-                QTextEdit {
+            self.setStyleSheet(f"""
+                QTextEdit {{
                     background: transparent;
                     border: none;
-                    color: #1c1917;
+                    color: {text_color};
                     selection-background-color: #fde68a;
                     padding: 2px;
-                }
-                QScrollBar:vertical {
+                }}
+                QScrollBar:vertical {{
                     width: 4px;
                     background: transparent;
-                }
-                QScrollBar::handle:vertical {
+                }}
+                QScrollBar::handle:vertical {{
                     background: #d6d3d1;
                     border-radius: 2px;
-                }
+                }}
             """)
         else:
             self.setFont(QFont("Georgia", 12))
-            self.setStyleSheet("""
-                QTextEdit {
+            self.setStyleSheet(f"""
+                QTextEdit {{
                     background: transparent;
                     border: none;
-                    color: #1c1917;
+                    color: {text_color};
                     selection-background-color: #fde68a;
                     padding: 4px;
                     line-height: 1.6;
-                }
+                }}
             """)
 
     def dump(self) -> dict:

@@ -1,12 +1,7 @@
-from dataclasses import dataclass, field
-from datetime import datetime
+"""Deprecated: `Board` was renamed `Journal` when the library/tabs refactor made
+a single global board obsolete. Kept as an alias so older imports still resolve.
+Prefer `from models.journal import Journal`."""
 
+from models.journal import Journal
 
-@dataclass
-class Board:
-    title: str = "My Journal"
-    notes: list = field(default_factory=list)   # list[Note]
-    groups: list = field(default_factory=list)  # list[Group]
-    scale: float = 1.0                          # global text/UI scale ("resolution")
-    created_at: str = field(default_factory=lambda: datetime.now().isoformat())
-    last_saved: str = ""
+Board = Journal

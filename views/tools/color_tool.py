@@ -29,4 +29,5 @@ class ColorTool(Tool):
         """)
 
     def activate(self, window) -> None:
-        window.open_color_picker_for_active()
+        # Pass this tool's button so the panel can anchor beneath it.
+        window.open_color_picker_for_active(anchor=self._button)
